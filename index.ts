@@ -8,7 +8,7 @@
  * Repo: https://github.com/ihsanbudiman/pi-context
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text, matchesKey } from "@earendil-works/pi-tui";
+import { Text } from "@earendil-works/pi-tui";
 
 const BUILTIN_TOOLS = new Set(["read", "bash", "edit", "write"]);
 const CHARS_PER_TOKEN = 4;
@@ -180,9 +180,7 @@ export default function (pi: ExtensionAPI) {
 					return {
 						render: (width: number) => panel.render(width),
 						invalidate: () => {},
-						handleInput: (data: string) => {
-							if (matchesKey(data, "escape") || matchesKey(data, "return") || matchesKey(data, "space")) done();
-						},
+						handleInput: () => done(),
 					};
 				});
 			} else {
