@@ -225,11 +225,21 @@ export default function (pi: ExtensionAPI) {
 
 			if (ctx.mode === "tui") {
 				await ctx.ui.custom<void>(
-					(_tui, _theme, _keybindings, done) => {
-						const panel = new Text(lines.map((l) => l.trimEnd()).join("\n"), 1, 1);
+					(_tui, theme, _keybindings, done) => {
+						const border = (s: string) => theme.fg("border", s);
+						const content = lines.map((l) => l.trimEnd());
+						const title = " context breakdown ";
 						return {
-							render: (width: number) => panel.render(width),
-							invalidate: () => panel.invalidate(),
+							render: (width: number) => {
+								const w = Math.min(width, Math.max(...content.map((l) => l.length)) + 6);
+								const inner = w - 4;
+								return [
+									border(`╭─${title}${"─".repeat(Math.max(0, w - 4 - title.length))}╮`),
+									...content.map((l) => border(`│${" "}${l.slice(0, inner).padEnd(inner)}${" "}│`)),
+									border(`╰${"─".repeat(w - 2)}╯`),
+								];
+							},
+							invalidate: () => {},
 							handleInput: (data: string) => {
 								done();
 								// Forward printable keys typed while the panel was open to the editor
