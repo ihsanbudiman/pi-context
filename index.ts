@@ -235,7 +235,8 @@ export default function (pi: ExtensionAPI) {
 								const inner = w - 4;
 								return [
 									border(`╭─${title}${"─".repeat(Math.max(0, w - 4 - title.length))}╮`),
-									...content.map((l) => border(`│${" "}${l.slice(0, inner).padEnd(inner)}${" "}│`)),
+									...content.map((l) =>
+										border(`│ `) + theme.bold(theme.fg("text", l.slice(0, inner).padEnd(inner))) + border(` │`)),
 									border(`╰${"─".repeat(w - 2)}╯`),
 								];
 							},
