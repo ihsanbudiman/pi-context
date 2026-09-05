@@ -204,7 +204,7 @@ export default function (pi: ExtensionAPI) {
 					}
 				}
 				if (requests > 0) {
-					lastReq = `Session (${requests} request${requests > 1 ? "s" : ""}): ${fmtK(input + read + write)} total sent (input ${fmtK(input)} · cached ${fmtK(read)} read / ${fmtK(write)} write) · output ${fmtK(out)}`;
+					lastReq = `Session (${requests} request${requests > 1 ? "s" : ""}): ${fmtK(input + out + read + write)} total (input ${fmtK(input)} · cached ${fmtK(read)} read / ${fmtK(write)} write · output ${fmtK(out)})`;
 				}
 			} catch {}
 
