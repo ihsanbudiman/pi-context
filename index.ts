@@ -124,23 +124,29 @@ export default function (pi: ExtensionAPI) {
 			}
 			const full = arg === "full";
 
-			// 3. chars/4 estimate, calibrated against the footer's context usage when known
+			// 3. chars/4 estimate, calibrated against the footer's context usage when known.
+			// Top-level categories only — sub-parts (msg:*, sys:*) are contained in their
+			// parents and must not be summed into the total.
+			const sysPartSum = snap.sysParts.reduce((n, p) => n + est(p.chars), 0);
 			const raw: Record<string, number> = {
 				messages: est(snap.messagesChars),
 				builtin: est(snap.tools.builtin),
 				mcp: est(snap.tools.mcp),
 				ext: est(snap.tools.ext),
-				sys: est(snap.sysChars),
-				...Object.fromEntries(snap.sysParts.map((p) => [`sys:${p.name}`, est(p.chars)])),
-				["msg:user"]: est(snap.messageChars.user),
-				["msg:assistant"]: est(snap.messageChars.assistant),
-				["msg:other"]: est(snap.messageChars.other),
+				// Some providers don't expose the system prompt in the serialized payload;
+				// take the larger of the payload measurement and the known sub-parts.
+				sys: Math.max(est(snap.sysChars), sysPartSum),
 			};
 			const estTotal = Object.values(raw).reduce((a, b) => a + b, 0);
 			const usage = ctx.getContextUsage();
 			const scale = usage?.tokens && estTotal > 0 ? usage.tokens / estTotal : 1;
 			const t = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, v * scale]));
-			const total = Object.values(t).reduce((a, b) => a + b, 0);
+			const msgUnit = t.messages / (est(snap.messagesChars) || 1);
+			t["msg:user"] = est(snap.messageChars.user) * msgUnit;
+			t["msg:assistant"] = est(snap.messageChars.assistant) * msgUnit;
+			t["msg:other"] = est(snap.messageChars.other) * msgUnit;
+			for (const p of snap.sysParts) t[`sys:${p.name}`] = (est(p.chars) / (sysPartSum || 1)) * t.sys;
+			const total = t.messages + t.builtin + t.mcp + t.ext + t.sys;
 			const toolTotal = t.builtin + t.mcp + t.ext;
 			const cal = (n: number) => `${fmtK(n)} ${pct(n, total)}%`;
 
