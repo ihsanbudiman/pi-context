@@ -7,11 +7,16 @@
  *
  * Repo: https://github.com/ihsanbudiman/pi-context
  */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { CONFIG_DIR_NAME, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 
 const BUILTIN_TOOLS = new Set(["read", "bash", "edit", "write"]);
 const CHARS_PER_TOKEN = 4;
+
+const CONFIG_FILE = join(homedir(), ".pi", "agent", "context-breakdown.json");
 
 type ToolSplit = {
 	builtin: number;
@@ -73,6 +78,14 @@ const clip = (names: string[], max = 46) => {
 export default function (pi: ExtensionAPI) {
 	let sys: Array<{ name: string; chars: number }> = [];
 	let snap: Snapshot | null = null;
+	// Persisted display mode (compact default), survives sessions and restarts
+	let mode: "compact" | "full" = "compact";
+	try {
+		if (existsSync(CONFIG_FILE)) {
+			const saved = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as { mode?: string };
+			if (saved.mode === "full" || saved.mode === "compact") mode = saved.mode;
+		}
+	} catch {}
 
 	// 1. System prompt + sub-categories, snapshotted per run
 	pi.on("before_agent_start", async (event) => {
@@ -111,18 +124,24 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("context", {
-		description: "Show context usage breakdown (/context full for detail)",
+		description: "Show context usage breakdown (/context full|compact|off)",
 		handler: async (args, ctx) => {
 			const arg = args?.trim() ?? "";
 			if (arg === "off") {
 				ctx.ui.setWidget("context-breakdown", undefined);
 				return;
 			}
+			if (arg === "full" || arg === "compact") {
+				mode = arg;
+				try {
+					writeFileSync(CONFIG_FILE, JSON.stringify({ mode }));
+				} catch {}
+			}
 			if (!snap) {
 				ctx.ui.notify("No provider request seen yet — send a message first.", "warning");
 				return;
 			}
-			const full = arg === "full";
+			const full = mode === "full";
 
 			// 3. chars/4 estimate, calibrated against the footer's context usage when known.
 			// Top-level categories only — sub-parts (msg:*, sys:*) are contained in their
