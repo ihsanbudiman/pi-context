@@ -14,6 +14,12 @@ Context: 26.3k tokens
 
 In a TUI session the breakdown opens as a dismissable panel (any key closes it); otherwise it renders as a widget above the editor (`/context off` clears it).
 
+## Usage
+
+- `/context` — compact breakdown (default): percentages of total context tokens per category
+- `/context full` — full breakdown: adds token counts, message sub-parts (user / assistant / tool results), built-in tool names, and every system-prompt sub-part
+- `/context off` — clear the widget
+
 ## Install
 
 ```sh

@@ -1,6 +1,10 @@
 /**
  * pi extension: /context — zcode-style context usage breakdown.
  *
+ * /context        compact breakdown (default)
+ * /context full   full breakdown with token counts and sub-parts
+ * /context off    clear the widget (non-TUI fallback)
+ *
  * Repo: https://github.com/ihsanbudiman/pi-context
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -9,9 +13,17 @@ import { Text, matchesKey } from "@earendil-works/pi-tui";
 const BUILTIN_TOOLS = new Set(["read", "bash", "edit", "write"]);
 const CHARS_PER_TOKEN = 4;
 
-type ToolSplit = { builtin: number; mcp: number; ext: number; mcpNames: string[]; extNames: string[] };
+type ToolSplit = {
+	builtin: number;
+	mcp: number;
+	ext: number;
+	builtinNames: string[];
+	mcpNames: string[];
+	extNames: string[];
+};
 
 type Snapshot = {
+	messageChars: { user: number; assistant: number; other: number };
 	messagesChars: number;
 	sysChars: number;
 	tools: ToolSplit;
@@ -24,7 +36,7 @@ const est = (chars: number) => chars / CHARS_PER_TOKEN;
 const isMcpTool = (name: string) => /^mcp($|__)/.test(name);
 
 function splitTools(tools: unknown[]): ToolSplit {
-	const split: ToolSplit = { builtin: 0, mcp: 0, ext: 0, mcpNames: [], extNames: [] };
+	const split: ToolSplit = { builtin: 0, mcp: 0, ext: 0, builtinNames: [], mcpNames: [], extNames: [] };
 	for (const tool of tools) {
 		const t = tool as { name?: string; function?: { name?: string } };
 		const name = t?.name ?? t?.function?.name ?? "";
@@ -34,6 +46,7 @@ function splitTools(tools: unknown[]): ToolSplit {
 			split.mcpNames.push(name);
 		} else if (BUILTIN_TOOLS.has(name)) {
 			split.builtin += chars;
+			split.builtinNames.push(name);
 		} else {
 			split.ext += chars;
 			if (name) split.extNames.push(name);
@@ -58,7 +71,7 @@ const clip = (names: string[], max = 46) => {
 };
 
 export default function (pi: ExtensionAPI) {
-	let sys: Snapshot["sysParts"] & Array<{ name: string; chars: number }> = [];
+	let sys: Array<{ name: string; chars: number }> = [];
 	let snap: Snapshot | null = null;
 
 	// 1. System prompt + sub-categories, snapshotted per run
@@ -78,19 +91,30 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_provider_request", (event) => {
 		const payload = (event.payload ?? {}) as Record<string, unknown>;
 		const messages = Array.isArray(payload.messages) ? payload.messages : [];
-		const tools = Array.isArray(payload.tools) ? payload.tools : [];
+		const byRole = { user: 0, assistant: 0, other: 0 };
+		let messagesChars = 0;
+		for (const m of messages) {
+			const chars = JSON.stringify(m).length;
+			messagesChars += chars;
+			const role = (m as { role?: string }).role;
+			if (role === "user") byRole.user += chars;
+			else if (role === "assistant") byRole.assistant += chars;
+			else byRole.other += chars;
+		}
 		snap = {
-			messagesChars: messages.reduce((n: number, m) => n + JSON.stringify(m).length, 0),
+			messageChars: byRole,
+			messagesChars,
 			sysChars: measureSystem(payload),
-			tools: splitTools(tools),
+			tools: splitTools(Array.isArray(payload.tools) ? payload.tools : []),
 			sysParts: sys,
 		};
 	});
 
 	pi.registerCommand("context", {
-		description: "Show context usage breakdown",
+		description: "Show context usage breakdown (/context full for detail)",
 		handler: async (args, ctx) => {
-			if (args?.trim() === "off") {
+			const arg = args?.trim() ?? "";
+			if (arg === "off") {
 				ctx.ui.setWidget("context-breakdown", undefined);
 				return;
 			}
@@ -98,36 +122,55 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify("No provider request seen yet — send a message first.", "warning");
 				return;
 			}
+			const full = arg === "full";
 
 			// 3. chars/4 estimate, calibrated against the footer's context usage when known
-			const raw = {
+			const raw: Record<string, number> = {
 				messages: est(snap.messagesChars),
 				builtin: est(snap.tools.builtin),
 				mcp: est(snap.tools.mcp),
 				ext: est(snap.tools.ext),
 				sys: est(snap.sysChars),
+				...Object.fromEntries(snap.sysParts.map((p) => [`sys:${p.name}`, est(p.chars)])),
+				["msg:user"]: est(snap.messageChars.user),
+				["msg:assistant"]: est(snap.messageChars.assistant),
+				["msg:other"]: est(snap.messageChars.other),
 			};
 			const estTotal = Object.values(raw).reduce((a, b) => a + b, 0);
 			const usage = ctx.getContextUsage();
 			const scale = usage?.tokens && estTotal > 0 ? usage.tokens / estTotal : 1;
 			const t = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, v * scale]));
 			const total = Object.values(t).reduce((a, b) => a + b, 0);
-
 			const toolTotal = t.builtin + t.mcp + t.ext;
-			const topSys = snap.sysParts.filter((p) => p.chars > 0).sort((a, b) => b.chars - a.chars).slice(0, 3).map((p) => p.name);
+			const cal = (n: number) => `${fmtK(n)} ${pct(n, total)}%`;
+
+			const row = (label: string, tokens: number, names?: string[]) =>
+				`  ${label.padEnd(14)}${full ? cal(tokens).padEnd(14) : `${pct(tokens, total)}%`}${names?.length ? `  (${clip(names)})` : ""}`;
+			const sub = (label: string, tokens: number, names?: string[]) =>
+				`    - ${label.padEnd(14)}${full ? cal(tokens).padEnd(14) : `${pct(tokens, total)}%`}${names?.length ? `  (${clip(names)})` : ""}`;
+
+			const topSys = snap.sysParts
+				.filter((p) => p.chars > 0)
+				.sort((a, b) => b.chars - a.chars)
+				.slice(0, 3)
+				.map((p) => p.name);
 			const lines = [
 				`Context: ${fmtK(total)} tokens${usage?.tokens ? "" : " (estimate)"}`,
-				`  Messages      ${pct(t.messages, total)}%`,
-				`  Tools         ${pct(toolTotal, total)}%`,
-				`    - built-in  ${pct(t.builtin, total)}%`,
-				`    - MCP       ${pct(t.mcp, total)}%   (${clip(snap.tools.mcpNames)})`,
-				`    - extension ${pct(t.ext, total)}%   (${clip(snap.tools.extNames)})`,
-				`  System prompt ${pct(t.sys, total)}%  (${topSys.join(", ") || "none"})`,
+				row("Messages", t.messages),
+				...(full ? [sub("user", t[`msg:user`]), sub("assistant", t[`msg:assistant`]), sub("tool results", t[`msg:other`])] : []),
+				row("Tools", toolTotal),
+				sub("built-in", t.builtin, full ? snap.tools.builtinNames : undefined),
+				sub("MCP", t.mcp, snap.tools.mcpNames),
+				sub("extension", t.ext, snap.tools.extNames),
+				row("System prompt", t.sys),
+				...(full
+					? snap.sysParts.filter((p) => p.chars > 0).sort((a, b) => b.chars - a.chars).map((p) => sub(p.name, t[`sys:${p.name}`]))
+					: [`    ${topSys.join(", ") || "none"}`]),
 			];
 
 			if (ctx.mode === "tui") {
 				await ctx.ui.custom<void>((_tui, _theme, _keybindings, done) => {
-					const panel = new Text(lines.join("\n"), 1, 1);
+					const panel = new Text(lines.map((l) => l.trimEnd()).join("\n"), 1, 1);
 					return {
 						render: (width: number) => panel.render(width),
 						invalidate: () => {},
@@ -137,8 +180,8 @@ export default function (pi: ExtensionAPI) {
 					};
 				});
 			} else {
-				ctx.ui.setWidget("context-breakdown", lines);
-				ctx.ui.notify("Breakdown shown as widget (/context off to clear).", "info");
+				ctx.ui.setWidget("context-breakdown", lines.map((l) => l.trimEnd()));
+				ctx.ui.notify(`Breakdown shown as widget (/context ${full ? "" : "full, "}off to clear).`, "info");
 			}
 		},
 	});
