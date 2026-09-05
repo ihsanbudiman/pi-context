@@ -179,7 +179,7 @@ export default function (pi: ExtensionAPI) {
 			const cal = (n: number) => `${fmtK(n)} ${pct(n, total)}%`;
 
 			const row = (label: string, tokens: number, names?: string[]) =>
-				`  ${label.padEnd(14)}${full ? cal(tokens).padEnd(14) : `${pct(tokens, total)}%`}${names?.length ? `  (${clip(names)})` : ""}`;
+				`  ${label.padEnd(18)}${full ? cal(tokens).padEnd(14) : `${pct(tokens, total)}%`}${names?.length ? `  (${clip(names)})` : ""}`;
 			const sub = (label: string, tokens: number, names?: string[]) =>
 				`    - ${label.padEnd(14)}${full ? cal(tokens).padEnd(14) : `${pct(tokens, total)}%`}${names?.length ? `  (${clip(names)})` : ""}`;
 
@@ -196,7 +196,13 @@ export default function (pi: ExtensionAPI) {
 					const m = (entry as { message?: { role?: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } } }).message;
 					if (m?.role === "assistant" && m.usage) {
 						const u = m.usage;
-						lastReq = `Last request: input ${fmtK(u.input ?? 0)} · cached ${fmtK(u.cacheRead ?? 0)} read / ${fmtK(u.cacheWrite ?? 0)} write · output ${fmtK(u.output ?? 0)}`;
+						const input = u.input ?? 0;
+						const out = u.output ?? 0;
+						const read = u.cacheRead ?? 0;
+						const write = u.cacheWrite ?? 0;
+						const uTotal = input + out + read + write;
+						const share = (n: number) => (uTotal > 0 ? ((n / uTotal) * 100).toFixed(1) : "0.0");
+						lastReq = `Last request: input ${fmtK(input)} (${share(input)}%) · cached ${fmtK(read)} read / ${fmtK(write)} write (${share(read + write)}%) · output ${fmtK(out)} (${share(out)}%)`;
 						break;
 					}
 				}
