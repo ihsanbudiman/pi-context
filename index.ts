@@ -189,20 +189,22 @@ export default function (pi: ExtensionAPI) {
 				.slice(0, 3)
 				.map((p) => p.name);
 
-			// Real token counts from the last assistant response (provider-reported)
+			// Cumulative provider-reported usage across the whole session
 			let lastReq: string | null = null;
 			try {
-				for (const entry of [...ctx.sessionManager.getBranch()].reverse()) {
+				let input = 0, out = 0, read = 0, write = 0, requests = 0;
+				for (const entry of ctx.sessionManager.getBranch()) {
 					const m = (entry as { message?: { role?: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } } }).message;
 					if (m?.role === "assistant" && m.usage) {
-						const u = m.usage;
-						const input = u.input ?? 0;
-						const out = u.output ?? 0;
-						const read = u.cacheRead ?? 0;
-						const write = u.cacheWrite ?? 0;
-						lastReq = `Last request: ${fmtK(input + read + write)} sent (${fmtK(input)} fresh + ${fmtK(read)} cache read + ${fmtK(write)} cache write) · output ${fmtK(out)}`;
-						break;
+						input += m.usage.input ?? 0;
+						out += m.usage.output ?? 0;
+						read += m.usage.cacheRead ?? 0;
+						write += m.usage.cacheWrite ?? 0;
+						requests++;
 					}
+				}
+				if (requests > 0) {
+					lastReq = `Session (${requests} request${requests > 1 ? "s" : ""}): input ${fmtK(input)} · cached ${fmtK(read)} read / ${fmtK(write)} write · output ${fmtK(out)}`;
 				}
 			} catch {}
 
