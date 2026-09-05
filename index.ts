@@ -200,9 +200,7 @@ export default function (pi: ExtensionAPI) {
 						const out = u.output ?? 0;
 						const read = u.cacheRead ?? 0;
 						const write = u.cacheWrite ?? 0;
-						const uTotal = input + out + read + write;
-						const share = (n: number) => (uTotal > 0 ? ((n / uTotal) * 100).toFixed(1) : "0.0");
-						lastReq = `Last request: input ${fmtK(input)} (${share(input)}%) · cached ${fmtK(read)} read / ${fmtK(write)} write (${share(read + write)}%) · output ${fmtK(out)} (${share(out)}%)`;
+						lastReq = `Last request: input ${fmtK(input)} · cached ${fmtK(read)} read / ${fmtK(write)} write · output ${fmtK(out)}`;
 						break;
 					}
 				}
