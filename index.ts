@@ -200,7 +200,7 @@ export default function (pi: ExtensionAPI) {
 						const out = u.output ?? 0;
 						const read = u.cacheRead ?? 0;
 						const write = u.cacheWrite ?? 0;
-						lastReq = `Last request: input ${fmtK(input)} · cached ${fmtK(read)} read / ${fmtK(write)} write · output ${fmtK(out)}`;
+						lastReq = `Last request: ${fmtK(input + read + write)} sent (${fmtK(input)} fresh + ${fmtK(read)} cache read + ${fmtK(write)} cache write) · output ${fmtK(out)}`;
 						break;
 					}
 				}
