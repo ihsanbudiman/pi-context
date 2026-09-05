@@ -224,18 +224,23 @@ export default function (pi: ExtensionAPI) {
 			];
 
 			if (ctx.mode === "tui") {
-				await ctx.ui.custom<void>((_tui, _theme, _keybindings, done) => {
-					const panel = new Text(lines.map((l) => l.trimEnd()).join("\n"), 1, 1);
-					return {
-						render: (width: number) => panel.render(width),
-						invalidate: () => {},
-						handleInput: (data: string) => {
-							done();
-							// Forward printable keys typed while the panel was open to the editor
-							if (data.length === 1 && data >= " ") ctx.ui.pasteToEditor(data);
-						},
-					};
-				});
+				await ctx.ui.custom<void>(
+					(_tui, _theme, _keybindings, done) => {
+						const panel = new Text(lines.map((l) => l.trimEnd()).join("\n"), 1, 1);
+						return {
+							render: (width: number) => panel.render(width),
+							invalidate: () => panel.invalidate(),
+							handleInput: (data: string) => {
+								done();
+								// Forward printable keys typed while the panel was open to the editor
+								if (data.length === 1 && data >= " ") ctx.ui.pasteToEditor(data);
+							},
+						};
+					},
+					// Overlay: pi's overlay stack owns focus capture/restore; replacing the
+					// editor in-place (non-overlay) loses focus and leaves stale rows on screen.
+					{ overlay: true, overlayOptions: { anchor: "center", width: "80%" } },
+				);
 			} else {
 				ctx.ui.setWidget("context-breakdown", lines.map((l) => l.trimEnd()));
 				ctx.ui.notify(`Breakdown shown as widget (/context ${full ? "" : "full, "}off to clear).`, "info");
