@@ -7,7 +7,7 @@
  *
  * Repo: https://github.com/ihsanbudiman/pi-context
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_DIR_NAME, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -124,11 +124,20 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("context", {
-		description: "Show context usage breakdown (/context full|compact|off)",
+		description: "Show context usage breakdown (/context full|compact|off|reset)",
 		handler: async (args, ctx) => {
 			const arg = args?.trim() ?? "";
 			if (arg === "off") {
 				ctx.ui.setWidget("context-breakdown", undefined);
+				return;
+			}
+			if (arg === "reset") {
+				try {
+					unlinkSync(CONFIG_FILE);
+				} catch {}
+				mode = "compact";
+				ctx.ui.setWidget("context-breakdown", undefined);
+				ctx.ui.notify("context-breakdown: config cleared, mode reset to compact.", "info");
 				return;
 			}
 			if (arg === "full" || arg === "compact") {
