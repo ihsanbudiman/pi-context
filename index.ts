@@ -188,6 +188,20 @@ export default function (pi: ExtensionAPI) {
 				.sort((a, b) => b.chars - a.chars)
 				.slice(0, 3)
 				.map((p) => p.name);
+
+			// Real token counts from the last assistant response (provider-reported)
+			let lastReq: string | null = null;
+			try {
+				for (const entry of [...ctx.sessionManager.getBranch()].reverse()) {
+					const m = (entry as { message?: { role?: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } } }).message;
+					if (m?.role === "assistant" && m.usage) {
+						const u = m.usage;
+						lastReq = `Last request: input ${fmtK(u.input ?? 0)} · cached ${fmtK(u.cacheRead ?? 0)} read / ${fmtK(u.cacheWrite ?? 0)} write · output ${fmtK(u.output ?? 0)}`;
+						break;
+					}
+				}
+			} catch {}
+
 			const lines = [
 				`Context: ${fmtK(total)} tokens${usage?.tokens ? "" : " (estimate)"}`,
 				row("Messages", t.messages),
@@ -200,6 +214,7 @@ export default function (pi: ExtensionAPI) {
 				...(full
 					? snap.sysParts.filter((p) => p.chars > 0).sort((a, b) => b.chars - a.chars).map((p) => sub(p.name, t[`sys:${p.name}`]))
 					: [`    ${topSys.join(", ") || "none"}`]),
+				...(lastReq ? [lastReq] : []),
 			];
 
 			if (ctx.mode === "tui") {
