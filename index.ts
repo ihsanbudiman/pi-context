@@ -180,7 +180,11 @@ export default function (pi: ExtensionAPI) {
 					return {
 						render: (width: number) => panel.render(width),
 						invalidate: () => {},
-						handleInput: () => done(),
+						handleInput: (data: string) => {
+							done();
+							// Forward printable keys typed while the panel was open to the editor
+							if (data.length === 1 && data >= " ") ctx.ui.pasteToEditor(data);
+						},
 					};
 				});
 			} else {
